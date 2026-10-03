@@ -50,7 +50,7 @@
 | Topology | 2 servos on same SIO bus, separate servo IDs |
 | Position feedback | ICS readback |
 | Board connector | JST XA 3pin per servo |
-| Harness | Star from board to each servo |
+| Harness | Star from board to each servo; VCC/GND/SIO all AWG20 |
 
 ### ICS interface
 
@@ -110,8 +110,7 @@ Tail側でnormalized commandへtrim / clamp / asymmetric rangeを適用し、ICS
 
 ### Protection
 
-- CAN TVS: 搭載する。具体MPNはTBD
-- PESD2CANFD24V-T classは候補として扱い、確定部品とはしない
+- CAN TVS: **Nexperia PESD2CANFD24V-T**
 - CMC: footprint provision only
 - Initial assembly: CMC DNI, CANH/CANL each 0 Ω bypass
 
@@ -146,6 +145,7 @@ Distribution at battery input:
 Main power switchは基板外ハーネス側に置く。
 
 Servo high-current pathへ制御枝用逆接MOSFET / TVSを直列挿入しない。
+Rudder / Elevator各枝に個別ヒューズは搭載しない。
 
 ---
 
@@ -225,9 +225,9 @@ Buck:
 | Input | CONTROL_BAT |
 | Output | 3.3 V |
 | Switching frequency | 500 kHz |
-| Inductor | 6.8 µH |
-| Inductor Isat | ≥2.7 A, preferably ≥3 A |
-| Inductor DCR | <100 mΩ target |
+| Inductor | **TDK SPM6530T-6R8M, 6.8 µH** |
+| Inductor Isat | 4 A class |
+| Inductor DCR | approximately 53 mΩ |
 | FB upper | 196 kΩ, 1% |
 | FB lower | 62 kΩ, 1% |
 | Cff | 100 pF |
@@ -236,7 +236,7 @@ Buck:
 | Cout | 22 µF ×2 ceramic |
 | EN | Autostart |
 
-Inductorはshielded type。具体MPNはTBD。
+Inductorはshielded type。採用品は **TDK SPM6530T-6R8M**。
 
 ---
 
@@ -294,7 +294,7 @@ USB 5V
 
 USB only powers logic. Servo power is never sourced from USB.
 
-USB shield connection method is still TBD.
+USB Type-C shell / shieldは **330 Ω ∥ 0.1 µF** でPCB GNDへ接続する。RCはコネクタ近傍へ配置する。
 
 ---
 
@@ -335,11 +335,11 @@ INA226 ×3:
 
 | Channel | Address | Shunt |
 |---|---:|---:|
-| Rudder | 0x40 | 10 mΩ candidate |
-| Elevator | 0x41 | 10 mΩ candidate |
-| 3.3V Logic | 0x44 | 50 mΩ candidate |
+| Rudder | 0x40 | 10 mΩ |
+| Elevator | 0x41 | 10 mΩ |
+| 3.3V Logic | 0x44 | 50 mΩ |
 
-Shunt値は現時点では候補。想定最大電流・分解能・電圧降下・損失を確認して最終確定し、具体MPNを選定する。
+Shunt値は上記で確定。Shunt抵抗の具体MPNは固定せず、必要な抵抗値・定格・精度・サイズを満たすものを実装時に選定する。
 
 ### Placement
 
@@ -383,7 +383,7 @@ Buttons:
 
 External watchdog:
 
-**TPS3820 family**
+**TPS3820-33DBVR**
 
 Current plan:
 
@@ -391,8 +391,6 @@ Current plan:
 - WDI-GND 1 kΩ footprint present but **DNP**
 - During boot / flashing: WDI remains High-Z
 - After application initialization: GPIO15 becomes output and watchdog kicking starts
-
-TPS3820 exact suffix is TBD.
 
 Watchdog kick condition in firmware is TBD. It must not be a meaningless unconditional heartbeat if steering tasks have failed.
 
@@ -514,22 +512,16 @@ External connectors should generally be placed at board edges. Exact edge assign
 
 ## 18. Open hardware items
 
-- Servo branch individual fuse: adoption / rating / part
-- AP63200 inductor exact MPN
-- Servo harness wire gauge
 - Servo power copper width / polygon geometry
-- TPS3820 exact suffix
 - TPS2116 peripheral constants final check
-- USB shield connection
 - ESP32-S3 antenna placement / keepout
 - GPIO final review
 - Optional CAN CMC exact part
-- CAN TVS exact MPN
-- INA226 shunt final values / exact MPNs
 - Main power switch exact part
 - JST VH board-header orientation / exact MPN
 - JST VH actual current / temperature / voltage-drop validation
 - KRS-5034HV operation at full 3S 12.6 V under representative load
+- Watchdog kick condition in firmware
 
 ---
 

@@ -1,6 +1,6 @@
 # Tail Control Board Specification
 
-更新日: **2026-10-02**
+更新日: **2026-10-03**
 
 テール操舵基板の**現行仕様**を管理する文書です。
 
@@ -110,7 +110,8 @@ Tail側でnormalized commandへtrim / clamp / asymmetric rangeを適用し、ICS
 
 ### Protection
 
-- CAN TVS: Nexperia PESD2CANFD24V-T class
+- CAN TVS: 搭載する。具体MPNはTBD
+- PESD2CANFD24V-T classは候補として扱い、確定部品とはしない
 - CMC: footprint provision only
 - Initial assembly: CMC DNI, CANH/CANL each 0 Ω bypass
 
@@ -161,7 +162,7 @@ TSM2309CX RFG PMOS reverse protection
  |
 CONTROL_BAT
  |
- +-- SMBJ15A -> GND
+ +-- SMAJ15A -> GND
  |
  +-- AP63200 -> 3.3V_MAIN
  |
@@ -199,7 +200,7 @@ Connection:
 
 ### TVS
 
-**SMBJ15A**, unidirectional
+**SMAJ15A**, unidirectional
 
 - VRWM: 15 V
 - VBR: approximately 16.7–18.5 V
@@ -334,9 +335,11 @@ INA226 ×3:
 
 | Channel | Address | Shunt |
 |---|---:|---:|
-| Rudder | 0x40 | 10 mΩ |
-| Elevator | 0x41 | 10 mΩ |
-| 3.3V Logic | 0x44 | 50 mΩ |
+| Rudder | 0x40 | 10 mΩ candidate |
+| Elevator | 0x41 | 10 mΩ candidate |
+| 3.3V Logic | 0x44 | 50 mΩ candidate |
+
+Shunt値は現時点では候補。想定最大電流・分解能・電圧降下・損失を確認して最終確定し、具体MPNを選定する。
 
 ### Placement
 
@@ -469,7 +472,7 @@ STATはCAN trafficに応じたactivity表示を含めるが、高頻度通信を
 | Copper weight | 1 oz |
 | Board thickness | 1.2 mm |
 | Mounting holes | M3 ×4, NPTH, GND non-connected |
-| Size target | Layout-driven, approximately <=100×100 mm guide |
+| Size target | **60 × 60 mm initial target; expand only if layout requires** |
 
 ### Layer stack
 
@@ -521,8 +524,10 @@ External connectors should generally be placed at board edges. Exact edge assign
 - ESP32-S3 antenna placement / keepout
 - GPIO final review
 - Optional CAN CMC exact part
+- CAN TVS exact MPN
+- INA226 shunt final values / exact MPNs
 - Main power switch exact part
-- PCB outline dimensions
+- JST VH board-header orientation / exact MPN
 - JST VH actual current / temperature / voltage-drop validation
 - KRS-5034HV operation at full 3S 12.6 V under representative load
 

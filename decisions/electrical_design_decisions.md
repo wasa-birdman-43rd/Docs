@@ -133,7 +133,7 @@ GNDプレーンを確保し、CAN・MCU・電源・サーボ系が同居する�
   -> 1812L110/33MR PTC
   -> TSM2309CX RFG P-channel MOSFET reverse-polarity protection
   -> CONTROL_BAT
-       -> SMBJ15A TVS to GND
+       -> SMAJ15A TVS to GND
        -> AP63200 -> 3.3V_MAIN
        -> AP7387-50SA-7 -> 5V_ICS
 ```
@@ -142,7 +142,7 @@ GNDプレーンを確保し、CAN・MCU・電源・サーボ系が同居する�
 - Reverse-polarity PMOS: TSM2309CX RFG
 - PMOS gate pull-down: 10 kΩ
 - PMOS gate-source clamp: 15 V Zener（BZT52C15系、Cathode=Source / Anode=Gate）
-- Control-bus TVS: SMBJ15A, unidirectional
+- Control-bus TVS: SMAJ15A, unidirectional
 - Control input bulk: 220 µF / 25 V + local ceramics
 
 ### Reason
@@ -209,14 +209,17 @@ TPS7A2450の入力耐圧ではTVSクランプとのマージンが小さい。�
 
 ### Decision
 
-INA226を3個搭載する。
+INA226を3個搭載し、Rudder / Elevator / 3.3V Logicを個別に計測する。
 
 | Measurement | I2C address | Shunt |
 |---|---:|---:|
-| Rudder | 0x40 | 10 mΩ |
-| Elevator | 0x41 | 10 mΩ |
-| 3.3V Logic | 0x44 | 50 mΩ |
+| Rudder | 0x40 | 10 mΩ候補 |
+| Elevator | 0x41 | 10 mΩ候補 |
+| 3.3V Logic | 0x44 | 50 mΩ候補 |
 
+- INA226 ×3、I2C address、配置方針は確定
+- Shunt値は現時点では候補値であり、想定最大電流・分解能・損失を確認して最終確定する
+- Shunt具体MPNも未決定
 - Logic shuntはTPS2116の後段、3.3V_LOGIC負荷の手前に配置する
 - INA226 supply: 3.3V_LOGIC
 - I2C pull-up: SDA/SCL各4.7 kΩ to 3.3V_LOGIC
@@ -225,7 +228,7 @@ INA226を3個搭載する。
 
 ### Reason
 
-既存のINA226資産を再利用し、Rudder / Elevator / Logicの電流を時系列で記録できるようにする。Logic側は50 mΩとして低電流域の分解能を確保する。
+既存のINA226資産を再利用し、Rudder / Elevator / Logicの電流を時系列で記録できるようにする。シャント値は測定レンジと電圧降下を見て確定する。
 
 ---
 
@@ -282,10 +285,28 @@ CAN / ICS / I2C / WDI / shunt等は専用TPを設けず、コネクタまたは�
 
 ---
 
+## 2026-10-03 — 整合性確認
+
+### Decision
+
+- Main 3S input connectorは JST VH 2pin（BAT+ / GND）
+- PCB外形は **60 × 60 mmを初期目標**とし、部品配置・大電流配線・放熱・コネクタアクセスに不足があれば必要方向へ拡張する
+- Control-bus TVS表記は **SMAJ15A** に統一する
+- CAN TVSは搭載方針のみ確定とし、具体MPNは未決定
+- INA226 ×3の採用・アドレス・計測位置は確定。10 mΩ / 10 mΩ / 50 mΩは候補値として扱い、シャント値と具体MPNは未決定
+
+### Reason
+
+会話上の最新決定とGitHub文書の差分を解消し、確定事項と候補値を分離するため。
+
+---
+
 ## 現時点の未決定事項
 
 - 各サーボ枝の個別ヒューズ有無・定格・型式
 - AP63200インダクタの具体MPN
+- CAN TVSの具体MPN
+- INA226シャント値の最終確定・具体MPN
 - サーボハーネス線径
 - 1 ozでのサーボ電源ポリゴン幅
 - TPS3820具体suffix
@@ -294,6 +315,6 @@ CAN / ICS / I2C / WDI / shunt等は専用TPを設けず、コネクタまたは�
 - ESP32-S3 antenna placement / keepoutの最終配置
 - GPIO割当の最終ERC/strap確認
 - Optional CAN CMCの具体MPN
-- PCB外形寸法
 - Main power switchの具体型式
+- JST VH基板側ヘッダの向き・具体MPN
 - JST VH入力コネクタの実負荷温度・電圧降下検証

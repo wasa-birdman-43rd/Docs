@@ -80,6 +80,8 @@ GNDプレーンを確保し、CAN・MCU・電源・サーボ系が同居する�
 - サーボ電源は3S LiPoを直接使用する
 - サーボ側はKRS純正コネクタ、基板側は JST XA 3pin
 - 基板から2サーボへスター配線する
+- サーボハーネスは VCC / GND / SIO の3本すべて **AWG20** で統一する
+- Rudder / Elevator各枝に個別ヒューズは搭載しない
 - ICS 3.3V/5V変換は近藤科学の3.3V対応回路を基本とし、SN74LV1T125系を使用する
 - ICS_SIGは5Vへ2.2 kΩでプルアップする
 
@@ -97,7 +99,7 @@ GNDプレーンを確保し、CAN・MCU・電源・サーボ系が同居する�
 - Tailは物理終端ノードとし、120 Ω終端を常時実装する
 - Tail側CANコネクタは JST XA 3pin（CANH / CANL / GND）
 - CANH/CANLはAWG24ツイストペアを基本とする
-- CAN TVSを実装する
+- CAN TVSは **Nexperia PESD2CANFD24V-T** を使用する
 - CAN CMCはフットプリントのみ用意し、初期実装はDNI、0 Ω×2でバイパスする
 
 ### Reason
@@ -158,7 +160,7 @@ PTCをTVSより上流に置き、TVS短絡故障時に制御枝だけを切り�
 - Buck: AP63200WU-7
 - Vout: 3.3 V
 - Switching frequency: 500 kHz
-- Inductor: 6.8 µH, Isat ≥ 2.7 A（3 A以上推奨）, DCR < 100 mΩ目安, shielded
+- Inductor: **TDK SPM6530T-6R8M**（6.8 µH, shielded, 4 A級, DCR約53 mΩ）
 - FB: 196 kΩ / 62 kΩ, 1%
 - Cff: 100 pF
 - Cbst: 100 nF
@@ -202,6 +204,7 @@ TPS7A2450の入力耐圧ではTVSクランプとのマージンが小さい。�
 - Main: AP63200 -> 3.3V_MAIN
 - TPS2116で 3.3V_MAIN を優先、3.3V_USB をバックアップ
 - MUX出力を 3.3V_LOGIC とする
+- USB Type-C shell / shieldは **330 Ω ∥ 0.1 µF** でPCB GNDへ接続する
 
 ---
 
@@ -213,13 +216,12 @@ INA226を3個搭載し、Rudder / Elevator / 3.3V Logicを個別に計測する�
 
 | Measurement | I2C address | Shunt |
 |---|---:|---:|
-| Rudder | 0x40 | 10 mΩ候補 |
-| Elevator | 0x41 | 10 mΩ候補 |
-| 3.3V Logic | 0x44 | 50 mΩ候補 |
+| Rudder | 0x40 | 10 mΩ |
+| Elevator | 0x41 | 10 mΩ |
+| 3.3V Logic | 0x44 | 50 mΩ |
 
-- INA226 ×3、I2C address、配置方針は確定
-- Shunt値は現時点では候補値であり、想定最大電流・分解能・損失を確認して最終確定する
-- Shunt具体MPNも未決定
+- INA226 ×3、I2C address、配置方針、Shunt値は確定
+- Shunt抵抗の具体MPNは設計上固定しない。必要な抵抗値・定格・精度・サイズを満たすものを実装時に選定する
 - Logic shuntはTPS2116の後段、3.3V_LOGIC負荷の手前に配置する
 - INA226 supply: 3.3V_LOGIC
 - I2C pull-up: SDA/SCL各4.7 kΩ to 3.3V_LOGIC
@@ -228,7 +230,7 @@ INA226を3個搭載し、Rudder / Elevator / 3.3V Logicを個別に計測する�
 
 ### Reason
 
-既存のINA226資産を再利用し、Rudder / Elevator / Logicの電流を時系列で記録できるようにする。シャント値は測定レンジと電圧降下を見て確定する。
+既存のINA226資産を再利用し、Rudder / Elevator / Logicの電流を時系列で記録できるようにする。Shunt値は 10 mΩ / 10 mΩ / 50 mΩ とする。
 
 ---
 
@@ -236,7 +238,7 @@ INA226を3個搭載し、Rudder / Elevator / 3.3V Logicを個別に計測する�
 
 ### Decision
 
-- 外付けWDT: TPS3820系
+- 外付けWDT: **TPS3820-33DBVR**
 - WDI: ESP32-S3 GPIO15（WOBCハードウェアを踏襲）
 - WDI-GND 1 kΩはフットプリントのみ用意し、初期実装はDNP
 - 起動中はWDIをHigh-Zとし、アプリケーション初期化後にGPIO出力化してWDT監視を開始する
@@ -285,36 +287,36 @@ CAN / ICS / I2C / WDI / shunt等は専用TPを設けず、コネクタまたは�
 
 ---
 
-## 2026-10-03 — 整合性確認
+## 2026-10-03 — 整合性確認・追加決定
 
 ### Decision
 
 - Main 3S input connectorは JST VH 2pin（BAT+ / GND）
 - PCB外形は **60 × 60 mmを初期目標**とし、部品配置・大電流配線・放熱・コネクタアクセスに不足があれば必要方向へ拡張する
-- Control-bus TVS表記は **SMAJ15A** に統一する
-- CAN TVSは搭載方針のみ確定とし、具体MPNは未決定
-- INA226 ×3の採用・アドレス・計測位置は確定。10 mΩ / 10 mΩ / 50 mΩは候補値として扱い、シャント値と具体MPNは未決定
+- Control-bus TVSは **SMAJ15A**
+- CAN TVSは **Nexperia PESD2CANFD24V-T**
+- AP63200用インダクタは **TDK SPM6530T-6R8M**
+- INA226 Shunt値は Rudder 10 mΩ / Elevator 10 mΩ / 3.3V Logic 50 mΩで確定。具体MPNは固定しない
+- 外部WDTは **TPS3820-33DBVR**
+- Rudder / Elevator各サーボ枝に個別ヒューズは搭載しない
+- サーボハーネスは VCC / GND / SIO の3本すべて **AWG20**
+- USB Type-C shell / shieldは **330 Ω ∥ 0.1 µF** でPCB GNDへ接続する
 
 ### Reason
 
-会話上の最新決定とGitHub文書の差分を解消し、確定事項と候補値を分離するため。
+会話上の最新決定とGitHub文書の差分を解消し、確定事項と未決事項を明確に分離するため。
 
 ---
 
 ## 現時点の未決定事項
 
-- 各サーボ枝の個別ヒューズ有無・定格・型式
-- AP63200インダクタの具体MPN
-- CAN TVSの具体MPN
-- INA226シャント値の最終確定・具体MPN
-- サーボハーネス線径
 - 1 ozでのサーボ電源ポリゴン幅
-- TPS3820具体suffix
 - WDI kickのソフトウェア健全性条件
-- USB shield接続方法
 - ESP32-S3 antenna placement / keepoutの最終配置
 - GPIO割当の最終ERC/strap確認
 - Optional CAN CMCの具体MPN
+- TPS2116周辺定数の最終確認
 - Main power switchの具体型式
 - JST VH基板側ヘッダの向き・具体MPN
 - JST VH入力コネクタの実負荷温度・電圧降下検証
+- KRS-5034HVの3S満充電12.6 V時の代表負荷試験

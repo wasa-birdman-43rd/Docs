@@ -1,7 +1,7 @@
 # 鳥人間 コックピット操舵基板 — Initial Hardware / Interface Design
 
-更新日: 2026-10-04  
-文書状態: **初版設計・レビュー待ち（Draft v0.1）**  
+更新日: 2026-10-05  
+文書状態: **レビュー反映版（Draft v0.2）**  
 対象: Cockpit Steering Control Board  
 設計段階: 回路図作成へ移行できる仕様案
 
@@ -21,15 +21,16 @@
 
 ## 1.1 主機能
 
-- 2軸ジョイスティックをESP32-S3内蔵ADCで取得
+- ラダー用・エレベータ用の独立ジョイスティック2個をESP32-S3内蔵ADCで取得
 - ジョイスティック値を校正・平滑化・正規化
-- ラダー／エレベータの飛行中トリムを操作
+- エレベータトリムをUP／DOWNスイッチで操作
 - 正規化操舵指令をCAN 500 kbpsでテールへ50 Hz送信
 - コックピット起動基準の共通時刻を10 Hzで送信
 - テール状態をCAN受信し、操縦者・整備者へ異常表示
 - 2S LiPoとUSB-Cのいずれでもロジック単体を起動
 - 外部WDTでソフトウェア停止時にESP32-S3を再起動
-- 電源電圧、ADC断線、CAN状態、タスク生存を監視
+- INA226を2個使用し、降圧前と3.3 Vラインの電圧・電流・電力を監視
+- ADC断線、CAN状態、タスク生存を監視
 
 ## 1.2 搭載しないもの
 
@@ -58,21 +59,22 @@
 ```text
 専用2S LiPo
     │
-    ├─ 入力保護 ─ AP63200 ─ 3.3 V_MAIN ─┐
-    │                                     │
-USB-C ─ AP7361C-33 ─ 3.3 V_USB ─────────┤ TPS2116
-                                          │
-                                     3.3 V_LOGIC
-                                          │
-       ┌──────────────────────────────────┼─────────────────────┐
-       │                                  │                     │
-ESP32-S3-WROOM-1-N16R8              TCAN3413               TPS3820
-       │                                  │                     │
-       ├─ Joystick ADC ×2                 └─ CANH/CANL/GND     └─ CHIP_PU
-       ├─ Battery ADC                          │
-       ├─ Trim encoders ×2                     ├─ Tail Steering Board
-       ├─ Optional I2C display                 └─ Measurement Board（受信のみでも可）
-       └─ Status LEDs
+    └─ 入力保護 ─ Shunt A ─ AP63200 ─ 3.3 V_MAIN ─┐
+                         │                         │
+                     INA226-A                      │
+                                                   ├─ TPS2116 ─ 3V3_MUX ─ Shunt B ─ 3.3 V_LOGIC
+USB-C ─ AP7361C-33 ─ 3.3 V_USB ──────────────────┘                         │
+                                                                       INA226-B
+
+3.3 V_LOGIC
+    ├─ ESP32-S3-WROOM-1-N16R8
+    │    ├─ Rudder joystick ADC
+    │    ├─ Elevator joystick ADC
+    │    ├─ Elevator trim UP/DOWN
+    │    ├─ INA226 ×2 / Optional I2C display
+    │    └─ Status LEDs
+    ├─ TCAN3413 ─ CANH/CANL/GND ─ Tail Steering Board / Measurement Board
+    └─ TPS3820 ─ CHIP_PU
 ```
 
 CANは物理的には多対多バスだが、操舵の主経路は `Cockpit → Tail` とする。計測基板は同じバスを受信してもよいが、計測基板の存在を操舵成立条件にしない。
@@ -101,18 +103,20 @@ N16R8ではOctal PSRAMにGPIO33〜GPIO37を使用するため、これらを外�
 | GPIO | 機能 | 備考 |
 |---:|---|---|
 | 0 | BOOT | 10 kΩ pull-up、BOOTボタンでGND |
+| 1 | INA226-A ALERT | 降圧前電源監視、10 kΩ pull-up |
+| 2 | INA226-B ALERT | 3.3 Vライン監視、10 kΩ pull-up |
 | 4 | ADC1 Rudder | ジョイスティック・ラダー軸 |
 | 5 | ADC1 Elevator | ジョイスティック・エレベータ軸 |
-| 6 | ADC1 Battery Sense | 保護後2S電圧の監視 |
-| 8 | I2C SDA | オプション表示器 |
-| 9 | I2C SCL | オプション表示器 |
-| 10 | Joystick Switch | オプション、未使用時pull-up |
-| 11 | Rudder Encoder A | トリム入力 |
-| 12 | Rudder Encoder B | トリム入力 |
-| 13 | Rudder Encoder SW | 長押しでラダートリム初期値へ |
-| 14 | Elevator Encoder A | トリム入力 |
-| 15 | Elevator Encoder B | トリム入力 |
-| 16 | Elevator Encoder SW | 長押しでエレベータトリム初期値へ |
+| 6 | Spare ADC1 | テストパッド、将来拡張 |
+| 8 | I2C SDA | INA226 ×2、オプション表示器 |
+| 9 | I2C SCL | INA226 ×2、オプション表示器 |
+| 10 | Spare GPIO | テストパッド |
+| 11 | Spare GPIO | テストパッド |
+| 12 | Spare GPIO | テストパッド |
+| 13 | Spare GPIO | テストパッド |
+| 14 | Elevator Trim UP | 10 kΩ pull-up、押下でGND |
+| 15 | Elevator Trim DOWN | 10 kΩ pull-up、押下でGND |
+| 16 | Spare GPIO | テストパッド |
 | 17 | TWAI TX | TCAN3413 TXD |
 | 18 | TWAI RX | TCAN3413 RXD |
 | 19 | USB D− | ESP32-S3 Native USB固定 |
@@ -151,6 +155,7 @@ JST VH BAT+
   → PTC
   → P-channel MOSFET逆接保護
   → TVS
+  → Shunt A（INA226-A、Kelvin接続）
   → 220 µF / 25 V
   → 10〜22 µF ceramic
   → AP63200 VIN
@@ -190,7 +195,7 @@ USB VBUS 5 V
 
 3.3 V_MAIN ─→ TPS2116 IN1（優先）
 3.3 V_USB  ─→ TPS2116 IN2（バックアップ）
-TPS2116 OUT → 3.3 V_LOGIC
+TPS2116 OUT → 3V3_MUX → Shunt B（INA226-B、Kelvin接続）→ 3.3 V_LOGIC
 ```
 
 - USBだけでもMCU、CANロジック、ADC、UIを動作可能
@@ -199,14 +204,26 @@ TPS2116 OUT → 3.3 V_LOGIC
 - TPS2116の逆電流阻止を利用
 - USB接続中でも外部電源の着脱でESPが不用意にリセットしないことを実測する
 
-## 5.5 電池電圧監視
+## 5.5 電圧・電流監視
 
-- 監視点: 逆接保護・PTC後の2Sノード
-- 分圧: 100 kΩ / 27 kΩ、1%
-- ADC側: 100 nF to GND
-- GPIO: GPIO6 / ADC1
-- 8.4 V入力時のADC電圧: 約1.79 V
-- ソフトウェアで個体校正係数を保持
+INA226を2個、同一I2Cバスへ異なるアドレスで接続する。電力監視は診断専用とし、INA226の未応答やI2C異常を操舵成立条件にしない。
+
+| Channel | I2C address | 測定位置 | Shunt初期案 | 測定内容 |
+|---|---:|---|---|---|
+| INA226-A | `0x40` | 入力保護後・AP63200前 | 50 mΩ、1%、2512、1 W | 保護後2S電圧、基板入力電流・電力 |
+| INA226-B | `0x41` | TPS2116後・3.3 V負荷前 | 20 mΩ、1%、2512、0.5 W以上 | 3.3 V_LOGIC電圧、ロジック電流・電力 |
+
+設計条件:
+
+- 両チャネルともハイサイド測定とする
+- INA226の電源、I2C、ALERT pull-upは3.3 V_LOGICへ接続する
+- INA226-AのALERTをGPIO1、INA226-BのALERTをGPIO2へ接続する
+- 各シャントは4端子相当のKelvin配線とし、電力配線とセンス配線を分離する
+- IN+／IN−に10 Ω直列抵抗用、差動入力間に10 nF用のフットプリントをIC直近へ置く。初期値は実測で調整する
+- ソフトウェアでシャント値・電流校正係数をチャネル別に持つ
+- ALERTは過電流／低電圧の即時通知に使用可能とするが、しきい値は実負荷試験後に確定する
+
+INA226-AはUSBのみで給電している場合、降圧前系統の負荷電流を示さない。INA226-Bは電源経路にかかわらず3.3 V_LOGICの総負荷電流を測定する。
 
 低電圧警告値は使用する2S LiPo容量・許容終止電圧と実負荷試験後に確定する。警告のみで直ちに操舵を停止しない。
 
@@ -216,28 +233,35 @@ TPS2116 OUT → 3.3 V_LOGIC
 
 ## 6.1 前提
 
-42代と同じ2軸ジョイスティックを使用する。ただし、現時点では型番・全抵抗値・ピン配列を未確認のため、以下を初版仮定とする。
+42代と同系統の可変抵抗式ジョイスティックを、ラダー用とエレベータ用に1個ずつ使用する。ただし、現時点では型番・全抵抗値・ピン配列を未確認のため、以下を初版仮定とする。
 
-- 2軸可変抵抗式
-- 両軸で3.3 VとGNDを共通使用
-- 各軸にワイパ出力1本
+- 1軸可変抵抗式 ×2
+- 各ジョイスティックへ3.3 V、GND、ワイパを配線
 - ESP32-S3 ADC1で測定可能
 
 能動出力式または5 V専用品だった場合は、コネクタ以降の入力段だけを変更する。
 
 ## 6.2 コネクタ
 
-**JST XA 5極**
+基板側は誤配線と切り分けを容易にするため、独立した**JST XA 3極を2個**使用する。
+
+**J3: Rudder Joystick**
 
 | Pin | Signal | 備考 |
 |---:|---|---|
 | 1 | 3V3_JOY | アナログ用フィルタ後電源 |
 | 2 | GND_JOY | 基板GND |
 | 3 | RUDDER_WIPER | ラダー軸 |
-| 4 | ELEVATOR_WIPER | エレベータ軸 |
-| 5 | JOYSTICK_SW | オプション、未使用可 |
 
-最終ピン番号は現物ハーネスとの誤接続防止レビュー後に凍結する。
+**J4: Elevator Joystick**
+
+| Pin | Signal | 備考 |
+|---:|---|---|
+| 1 | 3V3_JOY | アナログ用フィルタ後電源 |
+| 2 | GND_JOY | 基板GND |
+| 3 | ELEVATOR_WIPER | エレベータ軸 |
+
+両コネクタは同じピン配列とし、シルクとハーネス側ラベルでRUDDER／ELEVATORを識別する。最終ピン番号は現物ハーネスとの誤接続防止レビュー後に凍結する。
 
 ## 6.3 アナログ電源
 
@@ -323,29 +347,22 @@ ADC raw
 
 ## 7.1 操作器
 
-ラダー、エレベータそれぞれに、押しボタン付き機械式ロータリーエンコーダを1個使用する。
+初版はエレベータトリムのみ実装し、モーメンタリのUP／DOWNスイッチを各1個使用する。ラダートリム操作器は搭載しない。
 
-理由:
-
-- スイッチ固着でトリムが連続増加しにくい
-- クリック単位で変更量を制限できる
-- 押しボタン長押しで初期値へ戻せる
+- 各スイッチは押下時に入力をGNDへ接続するnormally-open構成
+- UP／DOWN同時押しは無効とし、診断カウンタを更新する
+- 固着や長押しでも設定範囲を超えない
 - 飛行中にPCを必要としない
 
 ## 7.2 UIコネクタ
 
-**JST XA 8極**
+**J5: JST XA 3極**
 
 | Pin | Signal |
 |---:|---|
-| 1 | 3.3 V_UI |
+| 1 | ELEV_TRIM_UP |
 | 2 | GND |
-| 3 | RUD_TRIM_A |
-| 4 | RUD_TRIM_B |
-| 5 | RUD_TRIM_SW |
-| 6 | ELE_TRIM_A |
-| 7 | ELE_TRIM_B |
-| 8 | ELE_TRIM_SW |
+| 3 | ELEV_TRIM_DOWN |
 
 各入力:
 
@@ -356,11 +373,10 @@ ADC raw
 
 ## 7.3 トリム仕様初期値
 
-- 1 detent: 25 count = 0.25%
+- 1押下: 25 count = 0.25%
 - 操作範囲: ±2000 count = ±20%
-- 回転速度による加速: 初版では使用しない
-- 押しボタン1秒長押し: その軸をデフォルトトリムへ復帰
-- 短押し: 何もしない
+- 長押し: 500 ms後から5 step/sで同じ方向へ更新
+- UP／DOWN同時押し: 値を変更しない
 - 現在値: RAM保持
 - 再起動時: `config.hpp` のデフォルトトリム
 - 飛行中のNVS保存: なし
@@ -449,8 +465,9 @@ Cockpit Node ID = `0x1`。
 | 0x021 | 0 | 0x01 | 10 Hz + change | Trim Command |
 | 0x022 | 0 | 0x02 | event + 10 Hz | Cockpit Fault / Validity |
 | 0x220 | 1 | 0x00 | 10 Hz | Time Sync |
-| 0x221 | 1 | 0x01 | 10 Hz | Cockpit Status / Battery |
+| 0x221 | 1 | 0x01 | 10 Hz | Input Power Status |
 | 0x222 | 1 | 0x02 | 10 Hz | Heartbeat |
+| 0x223 | 1 | 0x03 | 10 Hz | 3.3 V Power Status |
 
 IDは共有CAN定義ファイル `firmware/common/protocol/can_messages.hpp` にのみ定義し、各ノードへ数値を重複記述しない。
 
@@ -467,14 +484,27 @@ IDは共有CAN定義ファイル `firmware/common/protocol/can_messages.hpp` に
 
 | Byte | 型 | 内容 |
 |---:|---|---|
-| 0–1 | int16_t | Rudder trim |
+| 0–1 | int16_t | Rudder trim（初版は常に0、将来予約） |
 | 2–3 | int16_t | Elevator trim |
 | 4–5 | uint16_t | trim sequence |
 | 6–7 | uint16_t | flags / reserved |
 
 トリムはテール側でstickへ加算する。ICS生値はCANへ出さない。
 
-## 9.4 Time Sync（8 byte以内）
+## 9.4 Power Status（各8 byte）
+
+`0x221`はINA226-A、`0x223`はINA226-Bの値を同じ形式で送信する。
+
+| Byte | 型 | 内容 |
+|---:|---|---|
+| 0–1 | uint16_t | Bus voltage [mV] |
+| 2–3 | int16_t | Current [mA] |
+| 4–5 | uint16_t | Power [mW] |
+| 6–7 | uint16_t | valid / communication / ALERT flags |
+
+固定小数点の飽和範囲と無効値は共有CAN定義ファイルで定義する。
+
+## 9.5 Time Sync（8 byte以内）
 
 - `uint32_t timestamp_ms`
 - `uint16_t sequence`
@@ -545,7 +575,8 @@ UI、OLED、CAN status受信の停止だけではWDIを止めない。
 | Control | 10 ms | 高 | 校正、正規化、dead zone、trim統合状態 |
 | CAN TX | 20 ms | 高 | 操舵指令50 Hz、他周期送信 |
 | CAN RX | event | 中 | Tail status受信、最新値mailbox更新 |
-| Trim Input | 5 ms | 中 | Encoder decode、debounce、範囲制限 |
+| Trim Input | 5 ms | 中 | UP/DOWN debounce、長押しrepeat、範囲制限 |
+| Power Monitor | 100 ms | 低 | INA226 ×2取得、警告判定、I2C timeout |
 | UI / LED | 50〜100 ms | 低 | 表示更新、LEDパターン |
 | Diagnostics | 1 s | 最低 | カウンタ、電圧、エラー集計 |
 
@@ -556,6 +587,8 @@ UI、OLED、CAN status受信の停止だけではWDIを止めない。
 - CAN送信に失敗しても制御タスクをblockさせない
 - UIタスクから制御用データを直接書き換えない
 - 設定値更新時は範囲検査後に一括反映
+- INA226／表示器のI2Cアクセスはtimeout付きとし、失敗時に制御・CAN TXをblockさせない
+- I2Cバス固着時は周辺回路の再初期化を試み、操舵処理は最新の有効値で継続する
 
 ---
 
@@ -567,7 +600,10 @@ UI、OLED、CAN status受信の停止だけではWDIを止めない。
 |---|---|
 | 片軸ADC異常 | 該当stickを0、fault flag送信 |
 | 両軸ADC異常 | 両stickを0、fault flag送信 |
-| Encoder異常 | 最後の有効trimを保持 |
+| Trim UP/DOWN同時押し | 入力を無効化し、最後の有効trimを保持 |
+| Trim switch固着 | 上下限で停止し、fault flagを設定 |
+| INA226片側／両側異常 | 該当電力値を無効化、操舵継続 |
+| I2C bus固着 | timeout後にバス復旧試行、操舵継続 |
 | OLED/I2C異常 | 表示を停止、操舵継続 |
 | Battery low | 警告、操舵継続 |
 | Control/CAN task停止 | WDTを更新せずESP再起動 |
@@ -589,11 +625,12 @@ UI、OLED、CAN status受信の停止だけではWDIを止めない。
 |---|---|---|---:|
 | J1 | 2S LiPo | JST VH | 2 |
 | J2 | CAN | JST XA | 3 |
-| J3 | Joystick | JST XA | 5 |
-| J4 | Trim encoders | JST XA | 8 |
-| J5 | Optional I2C display | JST SHまたはXA | 4 |
-| J6 | UART debug | 2.54 mm header / Tag-Connect候補 | 4〜6 |
-| J7 | USB | HRO TYPE-C-31-M-12 | USB-C |
+| J3 | Rudder joystick | JST XA | 3 |
+| J4 | Elevator joystick | JST XA | 3 |
+| J5 | Elevator trim UP/DOWN | JST XA | 3 |
+| J6 | Optional I2C display | JST SHまたはXA | 4 |
+| J7 | UART debug | 2.54 mm header / Tag-Connect候補 | 4〜6 |
+| J8 | USB | HRO TYPE-C-31-M-12 | USB-C |
 
 すべての外部コネクタはシルクでPin 1、信号名、電源方向を明記する。J1とJ2は外形・色・位置を離し、誤挿入しにくくする。
 
@@ -604,15 +641,19 @@ UI、OLED、CAN status受信の停止だけではWDIを止めない。
 最低限、以下を設ける。
 
 - BAT_PROTECTED
+- INA226-A SHUNT+ / SHUNT−
 - 3V3_MAIN
 - 3V3_USB
+- 3V3_MUX
+- INA226-B SHUNT+ / SHUNT−
 - 3V3_LOGIC
 - GND ×3以上
 - RUDDER_WIPER connector side
 - RUDDER_ADC MCU side
 - ELEVATOR_WIPER connector side
 - ELEVATOR_ADC MCU side
-- BAT_ADC
+- I2C SDA / SCL
+- INA226-A ALERT / INA226-B ALERT
 - CAN_TXD / CAN_RXD
 - CANH / CANL
 - CHIP_PU
@@ -652,6 +693,9 @@ UI、OLED、CAN status受信の停止だけではWDIを止めない。
 7. 外部コネクタを基板外周へ並べ、抜差し可能にする
 8. BOOT/RESETとLEDをケース開口から確認可能にする
 9. テストポイントと部品リファレンスを読める向きに置く
+10. 電力シャントは電源経路へ直列配置し、主電流銅箔を太く短くする
+11. シャント両端からINA226へ左右対称のKelvinセンス配線を引き、入力フィルタをIC直近に置く
+12. シャントの発熱をジョイスティックADC入力部から離す
 
 アナログGNDを別ネットに分断せず、連続GND面を使う。アナログ入力の戻り電流経路を短くし、Buckの大電流ループがADC周辺を通らない配置でノイズを抑える。
 
@@ -667,6 +711,9 @@ UI、OLED、CAN status受信の停止だけではWDIを止めない。
 | Power MUX | TPS2116 |
 | CAN | TCAN3413DR |
 | External WDT | TPS3820-33DBVR |
+| Power monitor | INA226 ×2 |
+| Input shunt | 50 mΩ、1%、2512、1 W |
+| 3.3 V shunt | 20 mΩ、1%、2512、0.5 W以上 |
 | USB ESD | USBLC6-2SC6 |
 | USB connector | HRO TYPE-C-31-M-12 |
 | Control PTC | Littelfuse 1812L110/33MR |
@@ -683,12 +730,13 @@ KiCad回路図は以下の階層に分ける。
 
 1. `00_Top`
 2. `01_Power_2S_USB_Mux`
-3. `02_ESP32S3_Reset_WDT`
-4. `03_Joystick_ADC`
-5. `04_Trim_UI`
-6. `05_CAN`
-7. `06_USB_Debug`
-8. `07_Connectors_Testpoints`
+3. `02_Power_Monitor_INA226`
+4. `03_ESP32S3_Reset_WDT`
+5. `04_Joystick_ADC`
+6. `05_Trim_UI`
+7. `06_CAN`
+8. `07_USB_Debug`
+9. `08_Connectors_Testpoints`
 
 ネット名、部品リファレンス、DNP部品をシート間で統一し、回路図上に電圧・信号方向・初期実装状態を記載する。
 
@@ -705,6 +753,10 @@ KiCad回路図は以下の階層に分ける。
 5. USB 5 Vから3.3 V_USB確認
 6. TPS2116の優先・切替・逆流確認
 7. 2SとUSB同時接続、抜差し波形確認
+8. INA226-AをDMM／電子負荷と比較し、6.0〜8.4 Vおよび複数電流点で校正
+9. INA226-BをDMM／電子負荷と比較し、3.3 Vおよび複数電流点で校正
+10. 両シャントの電圧降下、発熱、パターン温度を最大想定負荷で確認
+11. 2S給電時は両チャネル、USB単独時はINA226-Bが意図どおり測定することを確認
 
 ## 19.2 MCU・USB
 
@@ -740,29 +792,32 @@ KiCad回路図は以下の階層に分ける。
 
 ## 19.5 UI・フェイルセーフ
 
-1. Encoder正逆転、チャタリング、早回し
-2. Encoder A/B/SWの各断線・GND短絡
-3. 1秒長押しリセットの誤操作性
-4. I2C display切離し・SDA/SCL固着
-5. ADC task、CAN task、UI taskを個別停止
-6. WDTが必要な停止だけを検出することを確認
+1. Trim UP／DOWNの単押し、長押し、チャタリング
+2. UP／DOWN同時押し、各断線、GND短絡、スイッチ固着
+3. 上下限で値が確実に停止することを確認
+4. INA226を片側ずつ未実装／未応答にし、操舵が継続することを確認
+5. I2C display切離し・SDA/SCL固着
+6. ADC task、CAN task、UI taskを個別停止
+7. WDTが必要な停止だけを検出することを確認
 
 ---
 
 # 20. レビューで優先して確認する項目
 
-1. 42代ジョイスティックの型番、全抵抗値、ピン配列
+1. 42代ジョイスティック2個の型番、全抵抗値、ピン配列
 2. ジョイスティックのラダー／エレベータ軸方向と極性
-3. JST XA 5極で既存ハーネスへ対応できるか
-4. トリム操作器をロータリーエンコーダ2個とするか
-5. オプションOLEDが必要か、LEDのみでよいか
-6. 専用2S LiPoの容量、コネクタ、運用終止電圧
-7. 80 mm × 60 mmの基板外形と取付穴位置
-8. 逆接PMOS、2S TVS、CAN TVSの在庫・実装性
-9. CAN message typeとpayload
-10. ADC異常時に該当軸を0へ戻す方針
-11. TPS3820の0.2 s watchdog timeoutでよいか
-12. Measurement Nodeを同じCANへ接続する最終トポロジ
+3. JST XA 3極×2で既存ハーネスへ対応できるか
+4. エレベータトリムUP／DOWNスイッチの現物型番と取付方法
+5. INA226-A/Bの最大想定電流とシャント値・定格
+6. 低電圧／過電流ALERTしきい値
+7. オプションOLEDが必要か、LEDのみでよいか
+8. 専用2S LiPoの容量、コネクタ、運用終止電圧
+9. 80 mm × 60 mmの基板外形と取付穴位置
+10. 逆接PMOS、2S TVS、CAN TVSの在庫・実装性
+11. CAN power status payloadの固定小数点表現
+12. ADC異常時に該当軸を0へ戻す方針
+13. TPS3820の0.2 s watchdog timeoutでよいか
+14. Measurement Nodeを同じCANへ接続する最終トポロジ
 
 ---
 
@@ -780,15 +835,19 @@ KiCad回路図は以下の階層に分ける。
   <https://www.ti.com/product/TPS2116>
 - Texas Instruments, TPS3820  
   <https://www.ti.com/product/TPS3820>
+- Texas Instruments, INA226  
+  <https://www.ti.com/product/INA226>
 - 42代電装引き継ぎ資料  
   <https://rsk1910.github.io/denso_42handover/>
 
 ---
 
-# 22. 初版結論
+# 22. レビュー反映版の結論
 
 コックピット操舵基板は、テール操舵基板と共通のESP32-S3、TCAN3413、USB-C、3.3 V電源、Power MUX、外部WDTを採用し、専用2S LiPoで独立動作させる。
 
-ジョイスティックはESP32-S3 ADC1へ保護・RC・断線検出付きで入力し、飛行中トリムは2個のロータリーエンコーダで変更する。操舵指令は正規化値として50 HzでCAN送信し、計測・表示機能の故障を操舵停止条件にしない。
+ラダー用・エレベータ用ジョイスティックは独立したJST XA 3極コネクタからESP32-S3 ADC1へ保護・RC・断線検出付きで入力する。飛行中トリムはエレベータのUP／DOWNスイッチだけを実装する。操舵指令は正規化値として50 HzでCAN送信する。
+
+入力保護後・降圧前と、Power MUX後・3.3 V_LOGIC前へINA226を1個ずつ配置し、両電源区間の電圧・電流・電力を独立監視する。電力監視と表示機能の故障は操舵停止条件にしない。
 
 初版回路図へ進む前の最大の確認点は、42代ジョイスティックの実物電気特性とコネクタ配列である。それ以外の主要ブロックは、この仕様のまま回路図化可能である。

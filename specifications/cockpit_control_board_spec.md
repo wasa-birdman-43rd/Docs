@@ -1,7 +1,7 @@
 # 鳥人間 コックピット操舵基板 — Initial Hardware / Interface Design
 
 更新日: 2026-10-05  
-文書状態: **レビュー反映版（Draft v0.2）**  
+文書状態: **整合性レビュー反映版（Draft v0.3）**  
 対象: Cockpit Steering Control Board  
 設計段階: 回路図作成へ移行できる仕様案
 
@@ -100,39 +100,38 @@ N16R8ではOctal PSRAMにGPIO33〜GPIO37を使用するため、これらを外�
 
 ## 4.3 GPIO割当案
 
+Tail基板と共通化できるコア機能は同じGPIOへ割り当てる。
+
 | GPIO | 機能 | 備考 |
 |---:|---|---|
 | 0 | BOOT | 10 kΩ pull-up、BOOTボタンでGND |
 | 1 | INA226-A ALERT | 降圧前電源監視、10 kΩ pull-up |
 | 2 | INA226-B ALERT | 3.3 Vライン監視、10 kΩ pull-up |
-| 4 | ADC1 Rudder | ジョイスティック・ラダー軸 |
-| 5 | ADC1 Elevator | ジョイスティック・エレベータ軸 |
-| 6 | Spare ADC1 | テストパッド、将来拡張 |
-| 8 | I2C SDA | INA226 ×2、オプション表示器 |
-| 9 | I2C SCL | INA226 ×2、オプション表示器 |
-| 10 | Spare GPIO | テストパッド |
-| 11 | Spare GPIO | テストパッド |
+| 4 | CAN TX | Tailと共通、TCAN3413 TXD |
+| 5 | CAN RX | Tailと共通、TCAN3413 RXD |
+| 6 | ADC1 Rudder | ジョイスティック・ラダー軸 |
+| 7 | ADC1 Elevator | ジョイスティック・エレベータ軸 |
+| 9 | TPS2116 ST | Tailと共通 |
+| 10 | Elevator Trim UP | 10 kΩ pull-up、押下でGND |
+| 11 | Elevator Trim DOWN | 10 kΩ pull-up、押下でGND |
 | 12 | Spare GPIO | テストパッド |
 | 13 | Spare GPIO | テストパッド |
-| 14 | Elevator Trim UP | 10 kΩ pull-up、押下でGND |
-| 15 | Elevator Trim DOWN | 10 kΩ pull-up、押下でGND |
-| 16 | Spare GPIO | テストパッド |
-| 17 | TWAI TX | TCAN3413 TXD |
-| 18 | TWAI RX | TCAN3413 RXD |
+| 14 | Spare GPIO | テストパッド |
+| 15 | External WDT WDI | Tailと共通、TPS3820-33 |
+| 16 | I2C SCL | Tailと共通、INA226 ×2、オプション表示器 |
+| 17 | I2C SDA | Tailと共通、INA226 ×2、オプション表示器 |
 | 19 | USB D− | ESP32-S3 Native USB固定 |
 | 20 | USB D+ | ESP32-S3 Native USB固定 |
-| 21 | External WDT WDI | TPS3820-33 |
-| 38 | CAN LED | 受送信表示、低優先度 |
-| 39 | Fault LED | 異常表示 |
-| 40 | TCAN STB | 10 kΩ pull-downで通常時Normal |
-| 41 | Power-good input | TPS2116状態監視、回路確定時に確認 |
-| 42 | Spare GPIO | テストパッド |
-| 43 | UART0 TX | デバッグヘッダ、499 Ω直列候補 |
-| 44 | UART0 RX | デバッグヘッダ |
+| 40 | TCAN STB | Tailと共通、10 kΩ pull-upで起動時Standby |
+| 41 | ERROR LED | Tailと共通 |
+| 42 | STAT LED | Tailと共通、heartbeat / CAN activity |
+| 43 | UART0 TX | Tailと共通、デバッグ予約 |
+| 44 | UART0 RX | Tailと共通、デバッグ予約 |
 | 47 | Spare GPIO | テストパッド |
-| 48 | Heartbeat LED | 動作確認用 |
+| 48 | Spare GPIO | テストパッド |
 
 GPIO3、45、46はストラップ影響を避けて通常機能に使用しない。GPIO33〜37はN16R8で使用しない。
+TCAN3413は起動時Standbyとし、TWAI初期化と受信キュー準備完了後にGPIO40でNormalへ移行する。
 
 ---
 
@@ -199,6 +198,7 @@ TPS2116 OUT → 3V3_MUX → Shunt B（INA226-B、Kelvin接続）→ 3.3 V_LOGIC
 ```
 
 - USBだけでもMCU、CANロジック、ADC、UIを動作可能
+- USB給電で起動した場合も、現在の仕様では有効な操舵指令を送信し得る。CAN接続・Tail電源ON時はサーボが動く可能性を運用上の前提とし、USB接続前に周囲安全と機構干渉がないことを確認する
 - USBから2S LiPoへ逆流させない
 - 2S接続中は3.3 V_MAINを優先
 - TPS2116の逆電流阻止を利用
@@ -290,8 +290,8 @@ WIPER connector
        └─ low-leakage clamp / ESD footprint → 3.3 V / GND
 ```
 
-- Rudder: GPIO4 / ADC1
-- Elevator: GPIO5 / ADC1
+- Rudder: GPIO6 / ADC1
+- Elevator: GPIO7 / ADC1
 - RC値はESP32-S3推奨の0.1 µFを基準とする
 - 低リークのクランプ部品を選び、ADC誤差を実測する
 - ADCノードとコネクタの両方にテストポイントを設ける
@@ -403,51 +403,72 @@ ADC raw
 
 # 8. CAN物理層
 
-## 8.1 トランシーバ
+## 8.1 バス構成
+
+操舵CANはCockpit、Tail、Measurementの3ノードを同一の500 kbpsバスへ接続する。
+CockpitとTailだけで操舵が成立し、Measurementの起動、応答、時刻同期は操舵成立条件にしない。
+
+- CockpitとTailを物理的な両端とし、両端だけ120 Ω終端を有効にする
+- MeasurementはCockpit付近から短いスタブで接続し、終端を実装しない
+- Measurementスタブは目標0.3 m以下とし、実ハーネスで波形とエラーカウンタを確認する
+- Measurementノードは送信頻度と優先度を制限し、操舵指令を妨げない
+- Measurement枝は専用コネクタで即時に切り離せる構成とする
+- Measurementの電源OFF、再起動、未接続状態でCockpit–Tail操舵試験に合格すること
+- Measurementトランシーバや配線の短絡は同一バス全体を停止させ得るため、結合試験で故障注入する
+
+別バス化は、SPI CANコントローラ、割込み、ドライバ、追加トランシーバを増やすためRev.1では採用しない。実機試験でMeasurement起因のバス障害を許容できないと判明した場合に、別バスまたは絶縁された一方向転送を再検討する。
+
+## 8.2 トランシーバ
 
 **TCAN3413DR**（SOIC-8を優先）
 
 - VCC: 3.3 V_LOGIC
 - VIO: 3.3 V_LOGIC
-- TXD: GPIO17
-- RXD: GPIO18
-- STB: GPIO40、10 kΩでGNDへpull-down
+- TXD: GPIO4
+- RXD: GPIO5
+- STB: GPIO40、10 kΩ pull-upで起動時Standby
+- TWAI初期化完了後にSTBをLowとしてNormalへ移行
 - 0.1 µF + 数µFをIC直近へ配置
 
 テール基板と同じ非絶縁構成とし、CANH/CANL/GNDを接続する。専用2Sとテール3Sは独立電源のまま、CAN GNDを信号基準として共有する。
 
-## 8.2 コネクタ
+## 8.3 コネクタ
 
-**JST XA 3極**
+**JST XA 4極**
 
 | Pin | Signal |
 |---:|---|
 | 1 | CANH |
 | 2 | CANL |
 | 3 | CAN_GND |
+| 4 | NC（誤挿入防止用キー極） |
 
-テール基板とピン番号を完全統一する。
+Pin 4は基板上でも無接続とし、ハーネス側も端子を装着しない。Tail、Cockpit、Measurementでピン番号を統一する。CANだけを4極とすることで、XA 3極のサーボ、ジョイスティック、トリムとの物理的な誤挿入を防ぐ。
 
-## 8.3 終端・保護
+## 8.4 終端・保護
 
-- 120 Ω終端を基板上に搭載
-- 0 ΩリンクまたはソルダージャンパでEnable/Disable
-- コックピットとテールをバス両端として、両方の終端を有効
+- 120 Ω終端をCockpitとTailに搭載
+- Cockpitは0 ΩリンクまたはソルダージャンパでEnable/Disable可能
+- Tailは物理端のため常時実装
+- Measurementは終端なし
 - 電源OFF状態でCANH-CANL間を測り、約60 Ωを確認
-- CAN用TVS: PESD2CANFD24V相当を初版候補
+- CAN用TVS: PESD2CANFD24V-T
 - CMC: フットプリントのみ、初期0 Ω／DNP
 - TVSとCMCはコネクタ直近
 
-## 8.4 ハーネス
+## 8.5 ハーネス
 
 - CANH/CANL: AWG24ツイストペア
 - GND: AWG24、ツイストペアに沿わせる
+- Pin 4: 未配線
 - 電源線はCANコネクタへ含めない
-- コックピット〜テール間で途中スタブを短くする
+- Cockpit〜Tailを幹線とし、Measurementへのスタブを最短化する
 
 ---
 
-# 9. CANメッセージ初版
+# 9. CANメッセージ初版（未凍結）
+
+本章のID・payloadはCockpit側の作業案であり、まだインターフェース凍結しない。両基板で共通に扱う確定範囲と未決定範囲は [steering_can_interface.md](steering_can_interface.md) を正本とする。
 
 標準11 bit ID:
 
@@ -547,7 +568,7 @@ D+/D−は短く、同層・連続GND参照・等長を意識し、Buck SWノー
 ## 11.2 接続
 
 ```text
-GPIO21 → WDI
+GPIO15 → WDI
 TPS3820 /RESET → ESP32-S3 CHIP_PU
 RESET button → TPS3820 /MR
 BOOT button → GPIO0 to GND

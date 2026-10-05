@@ -68,36 +68,31 @@
 | Item | Current specification |
 |---|---|
 | Bitrate | 500 kbps |
-| Physical scope | Cockpit ↔ Tail |
-| Tail position | Physical endpoint |
-| Termination | 120 Ω, always populated |
-| Connector | JST XA 3pin |
-| Pin signals | CANH / CANL / GND |
-| Harness | AWG24 CANH/CANL twisted pair + GND |
+| Physical scope | Cockpit / Tail / Measurementの同一バス |
+| Physical endpoints | CockpitとTail |
+| Termination | Cockpit 120 Ω有効、Tail 120 Ω常時実装、Measurement終端なし |
+| Connector | JST XA 4pin |
+| Pin signals | Pin 1 CANH / Pin 2 CANL / Pin 3 GND / Pin 4 NC |
+| Harness | AWG24 CANH/CANL twisted pair + GND、Pin 4未配線 |
+| Measurement branch | Cockpit付近から目標0.3 m以下の短いスタブ、切離し可能 |
 
-### CAN ID
+CockpitとTailだけで操舵が成立し、Measurementの起動、応答、時刻同期は操舵成立条件にしない。Measurementの電源OFF、再起動、未接続状態でも操舵を継続する。Measurementの短絡故障は同一バスを停止させ得るため、結合試験で故障注入し、必要ならRev.2で別バス化を再検討する。
 
-11-bit standard ID:
+CANコネクタは他のXA 3pinコネクタとの誤挿入を防ぐためXA 4pinとし、Pin 4をNCのキー極として使用する。Pin 4は基板上でもハーネス上でも接続しない。
 
-```text
-[Priority 2bit][Node ID 4bit][Message Type 5bit]
-```
+### CAN protocol status
 
-Node IDs:
+共通の確定範囲と未決定範囲は [steering_can_interface.md](steering_can_interface.md) を正本とする。ID番号、全payload、endianness、flag割当などは未凍結であり、Cockpit仕様書の具体値は作業案として扱う。
 
-- 0: Reserved
-- 1: Cockpit
-- 2: Tail
-- 3: Measurement
-- 4–F: Expansion
+現時点の共通範囲:
 
-### Steering command
-
-- int16_t
-- -10000 … +10000 = -100 … +100 %
+- 11-bit standard ID
+- Node ID候補: Cockpit 1 / Tail 2 / Measurement 3
+- 操舵指令: normalized int16_t、-10000 … +10000
 - Cockpit command rate: approximately 50 Hz
-- Sequence: uint16_t
 - Timestamp synchronization from Cockpit: approximately 10 Hz
+- Sequence: uint16_t
+- CAN timeout initial value: 300 ms
 
 Tail側でnormalized commandへtrim / clamp / asymmetric rangeを適用し、ICS commandへ変換する。
 
@@ -107,6 +102,14 @@ Tail側でnormalized commandへtrim / clamp / asymmetric rangeを適用し、ICS
 - Timeout後、最後に有効だったtrim positionへ約0.7 sでsmooth return
 - CAN復帰後もrate-limited recovery
 - Normal controlにはrate limitを掛けない
+
+### Transceiver startup
+
+- TCAN3413 TXD: GPIO4
+- TCAN3413 RXD: GPIO5
+- TCAN3413 STB: GPIO40
+- STBは10 kΩ pull-upで起動時Standby
+- TWAI初期化と受信キュー準備完了後にGPIO40をLowとしてNormalへ移行
 
 ### Protection
 
@@ -414,6 +417,7 @@ Current assignment / candidate:
 | 17 | I2C_SDA | WOBC-aligned |
 | 19 | USB_D- | Native USB |
 | 20 | USB_D+ | Native USB |
+| 40 | TCAN_STB | Shared core; boot-time Standby |
 | 41 | ERROR LED | WOBC-aligned |
 | 42 | STAT LED | WOBC-aligned |
 | 43 | Debug UART TX reserve | Reserved |
@@ -503,7 +507,7 @@ STATはCAN trafficに応じたactivity表示を含めるが、高頻度通信を
 | Main 3S input | JST VH 2pin |
 | Rudder | JST XA 3pin |
 | Elevator | JST XA 3pin |
-| CAN | JST XA 3pin |
+| CAN | JST XA 4pin（Pin 4 NC） |
 | Programming / debug | USB Type-C |
 
 External connectors should generally be placed at board edges. Exact edge assignment is layout-driven.

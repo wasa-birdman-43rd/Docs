@@ -575,3 +575,10 @@ External connectors should generally be placed at board edges. Exact edge assign
 - Thermal test
 - Continuous operation test
 - Moisture protection / coating inspection
+
+
+## 20. BBM移行と共有条件（2026-10-12）
+
+[BBM試験計画](../tests/steering_bbm_test_plan.md) に沿い、回路図確定前に2ノード通信から段階検証する。SSCI-110044 ×3を購入済み。
+USBでCockpitが起動し、CAN接続・Tailサーボ電源ONの場合にサーボが動く可能性は許容仕様。USB自体からサーボ電源は供給しない。
+共通CANのID／payloadとtrim再同期は未凍結。BBM試験結果を本仕様へ反映してから基板設計を確定する。

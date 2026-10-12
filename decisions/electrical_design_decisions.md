@@ -97,7 +97,7 @@ GNDプレーンを確保し、CAN・MCU・電源・サーボ系が同居する�
 
 - Cockpit ↔ Tail は CAN 500 kbps
 - Tailは物理終端ノードとし、120 Ω終端を常時実装する
-- Tail側CANコネクタは JST XA 3pin（CANH / CANL / GND）
+- 当時のTail側CANコネクタは JST XA 3pin（CANH / CANL / GND）。2026-10-05の追補でXA 4pinへ変更済み。
 - CANH/CANLはAWG24ツイストペアを基本とする
 - CAN TVSは **Nexperia PESD2CANFD24V-T** を使用する
 - CAN CMCはフットプリントのみ用意し、初期実装はDNI、0 Ω×2でバイパスする
@@ -320,3 +320,35 @@ CAN / ICS / I2C / WDI / shunt等は専用TPを設けず、コネクタまたは�
 - JST VH基板側ヘッダの向き・具体MPN
 - JST VH入力コネクタの実負荷温度・電圧降下検証
 - KRS-5034HVの3S満充電12.6 V時の代表負荷試験
+
+
+## 2026-10-05〜2026-10-12 — Cockpit設計・整合性レビュー・BBM
+
+### 確定した変更
+
+- CockpitはESP32-S3-WROOM-1-N16R8を直接実装する操舵専用基板。計測基板と分離する。
+- 専用2S LiPo、AP63200、USB AP7361C-33、TPS2116主電源優先構成。
+- ジョイスティックはRudder／Elevator各1個、基板コネクタも2個。
+- 操作トリムはElevatorのUP／DOWNスイッチのみ。
+- INA226を2個搭載し、降圧前と3.3 V負荷側の電圧・電流を測定する。
+- Cockpit／Tail／Measurementは500 kbpsの同一CAN。Cockpit–Tail単独で操舵成立。
+- CockpitとTailが両端終端。Measurementは短いスタブ・終端なし。
+- CANはJST XA 4極、1=CANH、2=CANL、3=GND、4=NC。NCそのものが機械キーになるのではなく、4極ハウジングと他の3極の形状差で誤挿入を防ぐ。
+- 共通GPIO: CAN TX/RX=4/5、TPS2116 ST=9、WDI=15、I2C SCL/SDA=16/17、USB=19/20、TCAN STB=40、ERROR/STAT=41/42、UART=43/44。
+- Cockpit固有GPIO: ADC=6/7、Trim UP/DOWN=10/11。
+- USB起動時のサーボ動作の可能性は許容仕様。追加ARM操作は今回の確定条件としない。
+- CANプロトコルは確定範囲／候補／未決定範囲を共通文書へ集約し、具体IDとpayloadの凍結を後回しにする。
+- 回路図確定前にBBM試験を実施。SSCI-110044 ×3を購入済み。
+
+### 判断理由と制約
+
+同一CANは配線・実装が単純だが、Measurement枝の物理短絡は操舵バスにも波及する。別バスは適切に分離すれば故障波及を抑えられる一方、追加ハード・ソフトの検証が必要。単純さだけで同一バスの方が安全と断定せず、BBMの故障注入結果と要求に基づいて再評価する。
+
+### 未確定事項の保存
+
+Buck周辺定数、USBシールド、INA226アドレス／Logicシャント／ALERT、PMOSの追加共通化はレビュー提案として保存し、採用済みと混同しない。
+trim再同期、軸方向、CAN全payload、試験コード用リポジトリ名は未確定。
+
+### 次の作業
+
+[BBM試験計画](../tests/steering_bbm_test_plan.md) を実施して結果を仕様書へ戻す。試験コードもGitHubで管理する方針案だが、現時点では未作成・未実機検証。

@@ -21,3 +21,14 @@ WASA 43代 鳥人間電装の設計資料リポジトリです。
 2. 関係する `specifications/` を現行仕様へ更新する
 
 設計判断ログと現行仕様を分離することで、過去の経緯と現在の正しい仕様を混同しないようにします。
+
+
+## Current steering design
+
+- [Cockpit操舵基板](specifications/cockpit_control_board_spec.md)
+- [Tail操舵基板](specifications/tail_control_board_spec.md)
+- [共通CAN仕様・決定状態](specifications/steering_can_interface.md)
+- [設計判断ログ](decisions/electrical_design_decisions.md)
+- [BBM配線・試験計画・コード管理方針](tests/steering_bbm_test_plan.md)
+
+現在はBBM検証前の設計案。試験結果、回路図、試験コードの完成を意味しない。

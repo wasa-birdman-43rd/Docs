@@ -1,6 +1,6 @@
 # Steering CAN Interface — Shared Status
 
-更新日: 2026-10-05  
+更新日: 2026-10-12  
 文書状態: **Draft / 未凍結**  
 対象: Cockpit Steering Board / Tail Steering Board / Measurement Board
 
@@ -78,3 +78,10 @@
 - Cockpit USB接続中のTail起動・停止
 - 全ノード接続時のCANH–CANL約60 Ω
 - 最大ハーネス長・実配置での波形、error counter、bus-off発生有無
+
+
+## 7. BBM検証
+
+SSCI-110044 TCAN3413モジュールを3枚購入済み。まず2ノードで検証し、その後Measurementを追加する。
+配線・終端スイッチ・SJ1/SJ2・試験順序・コード管理方針は [BBM試験計画](../tests/steering_bbm_test_plan.md) を参照する。
+使用するフレームはClassic CAN。ESP32-S3内蔵TWAIでCAN FDフレームを使用しない。
